@@ -147,6 +147,15 @@ directions.forEach((_vector, direction) => {
   });
 });
 
+//reset button
+const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
+resetButton.addEventListener("click", () => {
+  if (confirm("Are you sure you want to reset?")) {
+    localStorage.clear();
+    location.reload();
+  }
+});
+
 function movePlayer(vector: Cell) {
   const oldLocation = player.location;
   player.location = leaflet.latLng(
