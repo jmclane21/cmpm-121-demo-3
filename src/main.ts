@@ -33,7 +33,7 @@ class EventListener {
   }
 
   playerMoved() {
-    console.log("player moved");
+    console.log("player moved", player.location);
     player.marker.setLatLng(player.location);
     map.setView(player.location);
     updateLocalCaches();
@@ -120,10 +120,10 @@ directions.forEach((_vector, direction) => {
 });
 
 function movePlayer(vector: Cell) {
-  const oldLocation = board.getCellForPoint(player.location);
+  const oldLocation = player.location;
   player.location = leaflet.latLng(
-    (oldLocation.i + vector.i) * TILE_DEGREES,
-    (oldLocation.j + vector.j) * TILE_DEGREES,
+    oldLocation.lat + vector.i * TILE_DEGREES,
+    oldLocation.lng + vector.j * TILE_DEGREES,
   );
   document.dispatchEvent(new Event("player-moved"));
 }
@@ -141,10 +141,15 @@ function updateStatusPanel() {
 }
 
 const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
-
+let localCaches: Cache[] = [];
 let cacheMarkers: leaflet.Rectangle[] = [];
 
 function updateLocalCaches() {
+  localCaches.forEach((_cache) => {
+    //memento things
+  });
+  localCaches = [];
+
   cacheMarkers.forEach((marker) => {
     marker.remove();
   });
@@ -152,7 +157,7 @@ function updateLocalCaches() {
 
   board.getCellsNearPoint(player.location).forEach((cell) => {
     if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      spawnCache(cell);
+      localCaches.push(spawnCache(cell));
     }
   });
 }
