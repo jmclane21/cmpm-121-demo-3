@@ -34,6 +34,9 @@ class EventListener {
 
   playerMoved() {
     console.log("player moved");
+    player.marker.setLatLng(player.location);
+    map.setView(player.location);
+    updateLocalCaches();
   }
 
   playerInventoryChanged() {
@@ -102,6 +105,29 @@ const player: Player = {
 player.marker.bindTooltip("That's you!");
 player.marker.addTo(map);
 
+//player movement buttons
+const directions = new Map<string, Cell>();
+directions.set("north", { i: 1, j: 0 });
+directions.set("south", { i: -1, j: 0 });
+directions.set("east", { i: 0, j: 1 });
+directions.set("west", { i: 0, j: -1 });
+
+directions.forEach((_vector, direction) => {
+  const button = document.querySelector<HTMLButtonElement>(`#${direction}`)!;
+  button.addEventListener("click", () => {
+    movePlayer(directions.get(direction)!);
+  });
+});
+
+function movePlayer(vector: Cell) {
+  const oldLocation = board.getCellForPoint(player.location);
+  player.location = leaflet.latLng(
+    (oldLocation.i + vector.i) * TILE_DEGREES,
+    (oldLocation.j + vector.j) * TILE_DEGREES,
+  );
+  document.dispatchEvent(new Event("player-moved"));
+}
+
 const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!; // element `statusPanel` is defined in index.html
 statusPanel.innerHTML = "No coins yet...";
 
@@ -116,10 +142,27 @@ function updateStatusPanel() {
 
 const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
 
+let cacheMarkers: leaflet.Rectangle[] = [];
+
+function updateLocalCaches() {
+  cacheMarkers.forEach((marker) => {
+    marker.remove();
+  });
+  cacheMarkers = [];
+
+  board.getCellsNearPoint(player.location).forEach((cell) => {
+    if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
+      spawnCache(cell);
+    }
+  });
+}
+
 //create one cache
-function spawnCache(cell: Cell) {
+function spawnCache(cell: Cell): Cache {
   const cache = generateCache(cell);
   renderCache(cache);
+
+  return cache;
 }
 
 function generateCache(cell: Cell): Cache {
@@ -141,6 +184,7 @@ function generateCache(cell: Cell): Cache {
 
 function renderCache(cache: Cache) {
   const rect = addRectangle(cache.position);
+  cacheMarkers.push(rect);
   bindCachePopup(rect, cache);
 }
 
@@ -196,7 +240,7 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
 //add parameter for player position
 function populateMap() {
   //player position
-  const origin = OAKES_CLASSROOM;
+  const origin = player.location;
 
   board.getCellsNearPoint(origin).forEach((cell) => {
     if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
