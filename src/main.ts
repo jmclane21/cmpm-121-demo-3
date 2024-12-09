@@ -71,6 +71,7 @@ const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
+const COIN_PROBABILITY = 25;
 
 // Create the map (element with id "map" is defined in index.html)
 const map = leaflet.map(document.getElementById("map")!, {
@@ -102,10 +103,15 @@ player.marker.bindTooltip("That's you!");
 player.marker.addTo(map);
 
 const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!; // element `statusPanel` is defined in index.html
-statusPanel.innerHTML = "No points yet...";
+statusPanel.innerHTML = "No coins yet...";
 
 function updateStatusPanel() {
-  statusPanel.innerHTML = `${player.inventory.length} coins accumulated`;
+  statusPanel.innerHTML = `<div>${player.inventory.length} coins collected</div>
+  `;
+  player.inventory.forEach((coin) => {
+    statusPanel.innerHTML +=
+      `<div> Coin ${coin.location.i}:${coin.location.j}#${coin.serialNumber}</div>`;
+  });
 }
 
 const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
@@ -123,8 +129,10 @@ function generateCache(cell: Cell): Cache {
   };
 
   //add coins to cache deterministically
-  const num_coins: number = Math.ceil(luck([cell.i, cell.j].toString()) * 10);
-  for (let i = 1; i < num_coins; i++) {
+  const num_coins: number = Math.ceil(
+    luck([cell.i, cell.j].toString()) * COIN_PROBABILITY,
+  );
+  for (let i = 0; i < num_coins; i++) {
     cache.coins.push({ location: cell, serialNumber: i });
   }
 
@@ -159,7 +167,7 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
       .querySelector<HTMLButtonElement>("#withdraw")!
       .addEventListener("click", () => {
         if (cache.coins.length > 0) {
-          player.inventory.push(cache.coins.pop()!);
+          player.inventory.push(cache.coins.shift()!);
           const coinCount = document.querySelector<HTMLSpanElement>("#count")!;
           coinCount.textContent = cache.coins.length.toString();
           document.dispatchEvent(new Event("player-inventory-changed"));
