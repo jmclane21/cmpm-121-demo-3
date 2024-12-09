@@ -11,6 +11,34 @@ import "./leafletWorkaround.ts";
 // Deterministic random number generator
 import luck from "./luck.ts";
 
+class EventListener {
+  constructor() {
+    this.initializeEventListeners();
+  }
+
+  initializeEventListeners() {
+    document.addEventListener("cache-updated", this.cacheUpdated);
+    document.addEventListener("player-moved", this.playerMoved);
+    document.addEventListener(
+      "player-inventory-changed",
+      this.playerInventoryChanged,
+    );
+  }
+
+  cacheUpdated() {
+    console.log("cache updated");
+  }
+
+  playerMoved() {
+    console.log("player moved");
+  }
+
+  playerInventoryChanged() {
+    console.log("player inventory changed");
+    updateStatusPanel();
+  }
+}
+
 interface Cell {
   i: number;
   j: number;
@@ -18,6 +46,7 @@ interface Cell {
 
 interface Cache {
   coins: Coin[];
+  position: Cell;
 }
 
 interface Coin {
@@ -25,11 +54,11 @@ interface Coin {
   serialNumber: number;
 }
 
-addEventListener("cache-updated", (_event) => {});
-
-addEventListener("player-moved", (_event) => {});
-
-addEventListener("player-inventory-changed", (_event) => {});
+interface Player {
+  location: leaflet.LatLng;
+  inventory: Coin[];
+  marker: leaflet.Marker;
+}
 
 // Location of our classroom (as identified on Google Maps)
 const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
@@ -59,50 +88,97 @@ leaflet
   })
   .addTo(map);
 
-// Add a marker to represent the player
-const playerMarker = leaflet.marker(OAKES_CLASSROOM);
-playerMarker.bindTooltip("That's you!");
-playerMarker.addTo(map);
+const _listener: EventListener = new EventListener();
 
-// Display number of coins collected
-let playerCoins = 0;
+const player: Player = {
+  location: OAKES_CLASSROOM,
+  inventory: [],
+  marker: leaflet.marker(OAKES_CLASSROOM),
+};
+player.marker.bindTooltip("That's you!");
+player.marker.addTo(map);
+
 const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!; // element `statusPanel` is defined in index.html
 statusPanel.innerHTML = "No points yet...";
 
+function updateStatusPanel() {
+  statusPanel.innerHTML = `${player.inventory.length} coins accumulated`;
+}
+
 //create one cache
 function spawnCache(cell: Cell) {
+  const cache = generateCache(cell);
+  renderCache(cache);
+}
+
+function generateCache(cell: Cell): Cache {
   const cache: Cache = {
     coins: [],
+    position: cell,
   };
-  cache.coins.push({ location: cell, serialNumber: 0 });
 
+  //add coins to cache deterministically
+  const num_coins: number = Math.ceil(luck([cell.i, cell.j].toString()) * 10);
+  for (let i = 1; i < num_coins; i++) {
+    cache.coins.push({ location: cell, serialNumber: i });
+  }
+
+  return cache;
+}
+
+function renderCache(cache: Cache) {
+  const rect = addRectangle(cache.position);
+  bindCachePopup(rect, cache);
+}
+
+function addRectangle(position: Cell): leaflet.Rectangle {
   const bounds = leaflet.latLngBounds([
-    [cell.i, cell.j],
-    [cell.i + TILE_DEGREES, cell.j + TILE_DEGREES],
+    [position.i, position.j],
+    [position.i + TILE_DEGREES, position.j + TILE_DEGREES],
   ]);
 
   const rect = leaflet.rectangle(bounds);
   rect.addTo(map);
 
-  // Handle interactions with the cache
+  return rect;
+}
+
+function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
   rect.bindPopup(() => {
     // The popup offers a description and button
     const popupDiv = document.createElement("div");
     popupDiv.innerHTML = `
-                <div>There is a cache here at "${cell.i},${cell.j}".</div>
-                <button id="take">Take</button>`;
+                <div>There is a cache here at "${cache.position.i},${cache.position.j}".</div>
+                <div>It contains <span id="count">${cache.coins.length}</span> coin(s).</div>
+                <button id="withdraw">Withdraw</button>
+                <button id="deposit">Deposit</button>`;
 
-    // Clicking the button decrements the cache's value and increments the player's points
+    //withdraw coin
     popupDiv
-      .querySelector<HTMLButtonElement>("#take")!
+      .querySelector<HTMLButtonElement>("#withdraw")!
       .addEventListener("click", () => {
-        if (cache.coins.pop()) {
-          //need to convert to events
-          playerCoins++;
-          statusPanel.innerHTML = `${playerCoins} coins accumulated`;
+        if (cache.coins.length > 0) {
+          player.inventory.push(cache.coins.pop()!);
+          const coinCount = document.querySelector<HTMLSpanElement>("#count")!;
+          coinCount.textContent = cache.coins.length.toString();
+          document.dispatchEvent(new Event("player-inventory-changed"));
+          document.dispatchEvent(new Event("cache-updated"));
         }
       });
-    //add drop coin here
+    //deposit coin
+    popupDiv
+      .querySelector<HTMLButtonElement>("#deposit")!
+      .addEventListener("click", () => {
+        if (player.inventory.length > 0) {
+          cache.coins.push(player.inventory.pop()!);
+
+          //should be moved to event listener?
+          const coinCount = document.querySelector<HTMLSpanElement>("#count")!;
+          coinCount.textContent = cache.coins.length.toString();
+          document.dispatchEvent(new Event("player-inventory-changed"));
+          document.dispatchEvent(new Event("cache-updated"));
+        }
+      });
 
     return popupDiv;
   });
