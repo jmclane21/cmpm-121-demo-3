@@ -40,7 +40,7 @@ class EventListener {
   }
 
   playerMoved() {
-    console.log("player moved", player.location);
+    console.log("player moved");
     player.marker.setLatLng(player.location);
     map.setView(player.location);
     updateLocalCaches();
@@ -49,6 +49,7 @@ class EventListener {
   playerInventoryChanged() {
     console.log("player inventory changed");
     updateStatusPanel();
+    savePlayer();
   }
 }
 
@@ -106,11 +107,31 @@ const _listener: EventListener = new EventListener();
 
 const player: Player = {
   location: OAKES_CLASSROOM,
-  inventory: [],
+  inventory: loadPlayerCoins() ? loadPlayerCoins()! : [],
   marker: leaflet.marker(OAKES_CLASSROOM),
 };
 player.marker.bindTooltip("That's you!");
 player.marker.addTo(map);
+
+function playerCoinsToMomento(player: Player): string {
+  return JSON.stringify(player.inventory);
+}
+
+function playerCoinsFromMomento(momento: string): Coin[] {
+  return JSON.parse(momento);
+}
+
+function savePlayer() {
+  localStorage.setItem("player", playerCoinsToMomento(player));
+}
+
+function loadPlayerCoins(): Coin[] | null {
+  const momento = localStorage.getItem("player");
+  if (momento) {
+    return playerCoinsFromMomento(momento);
+  }
+  return null;
+}
 
 //player movement buttons
 const directions = new Map<string, Cell>();
@@ -152,18 +173,18 @@ let localCaches: Cache[] = [];
 let cacheMarkers: leaflet.Rectangle[] = [];
 
 //memento caches
-function toMomento(cache: Cache): string {
+function cacheToMomento(cache: Cache): string {
   return JSON.stringify(cache);
 }
 
-function fromMomento(momento: string): Cache {
+function cacheFromMomento(momento: string): Cache {
   return JSON.parse(momento);
 }
 
 function storeCache(cache: Cache) {
   localStorage.setItem(
     `${cache.position.i},${cache.position.j}`,
-    toMomento(cache),
+    cacheToMomento(cache),
   );
 }
 
@@ -205,10 +226,11 @@ function generateCache(cell: Cell): Cache {
 function loadCache(cell: Cell) {
   const momento = localStorage.getItem(`${cell.i},${cell.j}`);
   if (momento) {
-    const cache = fromMomento(momento);
+    const cache = cacheFromMomento(momento);
     return cache;
+  } else {
+    return generateCache(cell);
   }
-  return generateCache(cell);
 }
 
 //create one cache
@@ -259,6 +281,7 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
       .addEventListener("click", () => {
         if (cache.coins.length > 0) {
           player.inventory.push(cache.coins.shift()!);
+          storeCache(cache);
 
           document.dispatchEvent(new Event("player-inventory-changed"));
           document.dispatchEvent(
@@ -274,6 +297,7 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
       .addEventListener("click", () => {
         if (player.inventory.length > 0) {
           cache.coins.push(player.inventory.pop()!);
+          storeCache(cache);
 
           document.dispatchEvent(new Event("player-inventory-changed"));
           document.dispatchEvent(
@@ -288,4 +312,5 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
   });
 }
 
+document.dispatchEvent(new Event("player-inventory-changed"));
 updateLocalCaches();
