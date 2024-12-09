@@ -355,7 +355,7 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
 let time = 0;
 function tick() {
   time++;
-  if (time > 1000) {
+  if (time > 50) {
     trackPlayer();
 
     time = 0;
