@@ -20,7 +20,10 @@ class EventListener {
   }
 
   initializeEventListeners() {
-    document.addEventListener("cache-updated", this.cacheUpdated);
+    document.addEventListener("cache-updated", (e) => {
+      const customEvent = e as CustomEvent;
+      this.cacheUpdated(customEvent.detail.div, customEvent.detail.cache);
+    });
     document.addEventListener("player-moved", this.playerMoved);
     document.addEventListener(
       "player-inventory-changed",
@@ -28,8 +31,12 @@ class EventListener {
     );
   }
 
-  cacheUpdated() {
+  cacheUpdated(div: HTMLDivElement, cache: Cache) {
     console.log("cache updated");
+    const coinCount = div.querySelector<HTMLSpanElement>("#count")!;
+    coinCount.textContent = cache.coins.length.toString();
+    const coinList = div.querySelector<HTMLSpanElement>("#coins")!;
+    coinList.textContent = printCacheCoins(cache);
   }
 
   playerMoved() {
@@ -144,9 +151,25 @@ const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
 let localCaches: Cache[] = [];
 let cacheMarkers: leaflet.Rectangle[] = [];
 
+//memento caches
+function toMomento(cache: Cache): string {
+  return JSON.stringify(cache);
+}
+
+function fromMomento(momento: string): Cache {
+  return JSON.parse(momento);
+}
+
+function storeCache(cache: Cache) {
+  localStorage.setItem(
+    `${cache.position.i},${cache.position.j}`,
+    toMomento(cache),
+  );
+}
+
 function updateLocalCaches() {
-  localCaches.forEach((_cache) => {
-    //memento things
+  localCaches.forEach((cache) => {
+    storeCache(cache);
   });
   localCaches = [];
 
@@ -160,14 +183,6 @@ function updateLocalCaches() {
       localCaches.push(spawnCache(cell));
     }
   });
-}
-
-//create one cache
-function spawnCache(cell: Cell): Cache {
-  const cache = generateCache(cell);
-  renderCache(cache);
-
-  return cache;
 }
 
 function generateCache(cell: Cell): Cache {
@@ -187,10 +202,36 @@ function generateCache(cell: Cell): Cache {
   return cache;
 }
 
+function loadCache(cell: Cell) {
+  const momento = localStorage.getItem(`${cell.i},${cell.j}`);
+  if (momento) {
+    const cache = fromMomento(momento);
+    return cache;
+  }
+  return generateCache(cell);
+}
+
+//create one cache
+function spawnCache(cell: Cell): Cache {
+  const cache = loadCache(cell);
+  renderCache(cache);
+
+  return cache;
+}
+
 function renderCache(cache: Cache) {
   const rect = addRectangle(cache.position);
   cacheMarkers.push(rect);
   bindCachePopup(rect, cache);
+}
+
+function printCacheCoins(cache: Cache): string {
+  let result = ``;
+  cache.coins.forEach((coin) => {
+    result +=
+      `Coin ${coin.location.i}:${coin.location.j}#${coin.serialNumber}\n`;
+  });
+  return result;
 }
 
 function addRectangle(position: Cell): leaflet.Rectangle {
@@ -208,6 +249,7 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
     popupDiv.innerHTML = `
                 <div>There is a cache here at "${cache.position.i},${cache.position.j}".</div>
                 <div>It contains <span id="count">${cache.coins.length}</span> coin(s).</div>
+                <div><span id= "coins">${printCacheCoins(cache)}</span> </div>
                 <button id="withdraw">Withdraw</button>
                 <button id="deposit">Deposit</button>`;
 
@@ -217,10 +259,13 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
       .addEventListener("click", () => {
         if (cache.coins.length > 0) {
           player.inventory.push(cache.coins.shift()!);
-          const coinCount = document.querySelector<HTMLSpanElement>("#count")!;
-          coinCount.textContent = cache.coins.length.toString();
+
           document.dispatchEvent(new Event("player-inventory-changed"));
-          document.dispatchEvent(new Event("cache-updated"));
+          document.dispatchEvent(
+            new CustomEvent("cache-updated", {
+              detail: { div: popupDiv, cache: cache },
+            }),
+          );
         }
       });
     //deposit coin
@@ -230,11 +275,12 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
         if (player.inventory.length > 0) {
           cache.coins.push(player.inventory.pop()!);
 
-          //should be moved to event listener?
-          const coinCount = document.querySelector<HTMLSpanElement>("#count")!;
-          coinCount.textContent = cache.coins.length.toString();
           document.dispatchEvent(new Event("player-inventory-changed"));
-          document.dispatchEvent(new Event("cache-updated"));
+          document.dispatchEvent(
+            new CustomEvent("cache-updated", {
+              detail: { div: popupDiv, cache: cache },
+            }),
+          );
         }
       });
 
@@ -242,16 +288,4 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
   });
 }
 
-//add parameter for player position
-function populateMap() {
-  //player position
-  const origin = player.location;
-
-  board.getCellsNearPoint(origin).forEach((cell) => {
-    if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      spawnCache(cell);
-    }
-  });
-}
-
-populateMap();
+updateLocalCaches();
