@@ -42,6 +42,7 @@ class EventListener {
   playerMoved() {
     console.log("player moved");
     player.marker.setLatLng(player.location);
+    createPolyline();
     map.setView(player.location);
     updateLocalCaches();
   }
@@ -133,6 +134,45 @@ function loadPlayerCoins(): Coin[] | null {
   return null;
 }
 
+//reset button
+const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
+resetButton.addEventListener("click", () => {
+  if (confirm("Are you sure you want to reset?")) {
+    localStorage.clear();
+    lastPosition = OAKES_CLASSROOM;
+    movementHistory.forEach((polyline) => polyline.remove());
+    movementHistory.length = 0;
+    location.reload();
+  }
+});
+
+let tracking = false;
+let lastPosition: leaflet.LatLng = OAKES_CLASSROOM;
+const movementHistory: leaflet.Polyline[] = [];
+//live tracking button
+const sensorButton = document.querySelector<HTMLButtonElement>("#sensor")!;
+sensorButton.addEventListener("click", () => (tracking = !tracking));
+
+function trackPlayer() {
+  if (tracking) {
+    navigator.geolocation.watchPosition((position) => {
+      const latlng = leaflet.latLng(
+        position.coords.latitude,
+        position.coords.longitude,
+      );
+      player.location = latlng;
+      document.dispatchEvent(new Event("player-moved"));
+    });
+  }
+}
+
+function createPolyline() {
+  const latlngs = [player.location, lastPosition];
+  const polyline = leaflet.polyline(latlngs, { color: "red" });
+  movementHistory.push(polyline.addTo(map));
+  lastPosition = player.location;
+}
+
 //player movement buttons
 const directions = new Map<string, Cell>();
 directions.set("north", { i: 1, j: 0 });
@@ -145,15 +185,6 @@ directions.forEach((_vector, direction) => {
   button.addEventListener("click", () => {
     movePlayer(directions.get(direction)!);
   });
-});
-
-//reset button
-const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
-resetButton.addEventListener("click", () => {
-  if (confirm("Are you sure you want to reset?")) {
-    localStorage.clear();
-    location.reload();
-  }
 });
 
 function movePlayer(vector: Cell) {
@@ -321,5 +352,18 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
   });
 }
 
+let time = 0;
+function tick() {
+  time++;
+  if (time > 1000) {
+    trackPlayer();
+
+    time = 0;
+  }
+
+  requestAnimationFrame(tick);
+}
+
 document.dispatchEvent(new Event("player-inventory-changed"));
 updateLocalCaches();
+tick();
