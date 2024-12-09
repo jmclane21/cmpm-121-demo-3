@@ -155,7 +155,7 @@ sensorButton.addEventListener("click", () => (tracking = !tracking));
 
 function trackPlayer() {
   if (tracking) {
-    navigator.geolocation.watchPosition((position) => {
+    navigator.geolocation.getCurrentPosition((position) => {
       const latlng = leaflet.latLng(
         position.coords.latitude,
         position.coords.longitude,
