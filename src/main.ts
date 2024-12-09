@@ -11,6 +11,9 @@ import "./leafletWorkaround.ts";
 // Deterministic random number generator
 import luck from "./luck.ts";
 
+//cell flyweight representation
+import { Board } from "./board.ts";
+
 class EventListener {
   constructor() {
     this.initializeEventListeners();
@@ -66,7 +69,7 @@ const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
 // Tunable gameplay parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
-const NEIGHBORHOOD_SIZE = 8e-4;
+const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
 // Create the map (element with id "map" is defined in index.html)
@@ -105,6 +108,8 @@ function updateStatusPanel() {
   statusPanel.innerHTML = `${player.inventory.length} coins accumulated`;
 }
 
+const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
+
 //create one cache
 function spawnCache(cell: Cell) {
   const cache = generateCache(cell);
@@ -132,11 +137,7 @@ function renderCache(cache: Cache) {
 }
 
 function addRectangle(position: Cell): leaflet.Rectangle {
-  const bounds = leaflet.latLngBounds([
-    [position.i, position.j],
-    [position.i + TILE_DEGREES, position.j + TILE_DEGREES],
-  ]);
-
+  const bounds = board.getCellBounds(position);
   const rect = leaflet.rectangle(bounds);
   rect.addTo(map);
 
@@ -188,15 +189,12 @@ function bindCachePopup(rect: leaflet.Rectangle, cache: Cache) {
 function populateMap() {
   //player position
   const origin = OAKES_CLASSROOM;
-  for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i += TILE_DEGREES) {
-    for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j += TILE_DEGREES) {
-      // If location i,j is lucky enough, spawn a cache!
-      const cell: Cell = { i: i + origin.lat, j: j + origin.lng };
-      if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
-        spawnCache(cell);
-      }
+
+  board.getCellsNearPoint(origin).forEach((cell) => {
+    if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
+      spawnCache(cell);
     }
-  }
+  });
 }
 
 populateMap();
